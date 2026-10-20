@@ -1,0 +1,475 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>La Metamorfosis Kafkiana</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #000000;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
+            cursor: default;
+        }
+
+        /* Botón de Inicio Blanco */
+        #btn-inicio {
+            padding: 18px 45px;
+            font-size: 1.6rem;
+            color: #ffffff;
+            background: transparent;
+            border: 2px solid #ffffff;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 25px rgba(255, 255, 255, 0.4);
+            z-index: 10;
+        }
+
+        #btn-inicio:hover {
+            background-color: #ffffff;
+            color: #000000;
+            box-shadow: 0 0 35px rgba(255, 255, 255, 0.9);
+            transform: scale(1.08);
+        }
+
+        /* Controles Flotantes */
+        .controles {
+            display: none;
+            position: fixed;
+            top: 25px;
+            right: 25px;
+            gap: 12px;
+            z-index: 20;
+        }
+
+        .btn-control {
+            padding: 10px 22px;
+            font-size: 0.95rem;
+            color: #ffffff;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 30px;
+            backdrop-filter: blur(5px);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-control:hover {
+            background: #ffffff;
+            color: #000000;
+            transform: scale(1.05);
+        }
+
+        #btn-salir:hover {
+            background: rgba(255, 0, 85, 0.9);
+            border-color: #ff0055;
+            color: #ffffff;
+        }
+
+        /* Contenedor del Lienzo */
+        #canvas-container {
+            display: none;
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Audio del Proyecto (musica23.mp3) -->
+    <audio id="miMusica" src="musica23.mp3" preload="auto" loop></audio>
+
+    <!-- Botón de Inicio Blanco -->
+    <button id="btn-inicio">Inicio</button>
+
+    <!-- Controles flotantes -->
+    <div class="controles" id="panel-controles">
+        <button class="btn-control" id="btn-audio">🔊 Sonido: ON</button>
+        <button class="btn-control" id="btn-salir">Salir</button>
+    </div>
+
+    <!-- Contenedor del lienzo -->
+    <div id="canvas-container">
+        <canvas id="kafkaCanvas"></canvas>
+    </div>
+
+    <script>
+        const btnInicio = document.getElementById('btn-inicio');
+        const btnSalir = document.getElementById('btn-salir');
+        const btnAudio = document.getElementById('btn-audio');
+        const panelControles = document.getElementById('panel-controles');
+        const canvasContainer = document.getElementById('canvas-container');
+        const canvas = document.getElementById('kafkaCanvas');
+        const ctx = canvas.getContext('2d');
+        const audioElement = document.getElementById('miMusica');
+
+        let animacionId = null;
+        let activo = false;
+
+        // Estados: 'ESCRIBIENDO', 'TRANSFORMACION', 'HUIDA', 'ESPERA'
+        let estado = 'ESCRIBIENDO';
+        let tiempoEstado = 0;
+
+        // Elementos de la escena
+        let folios = [];
+        let sellos = [];
+        let pasoTecleo = 0;
+
+        // Coordenadas del escritorio
+        let mesa = { x: 0, y: 0 };
+        let escarabajoPos = { x: 0, y: 0, vy: -5 };
+
+        function ajustarCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            mesa.x = canvas.width / 2;
+            mesa.y = canvas.height / 2 + 60;
+        }
+
+        window.addEventListener('resize', () => {
+            if (activo) ajustarCanvas();
+        });
+
+        // Crear lluvia de folios de papel blanco
+        function generarFolio() {
+            if (folios.length < 35) {
+                folios.push({
+                    x: Math.random() * canvas.width,
+                    y: -40,
+                    vy: Math.random() * 1.5 + 1.0, // Caída más pausada
+                    rot: Math.random() * Math.PI,
+                    vRot: (Math.random() - 0.5) * 0.03
+                });
+            }
+        }
+
+        // Crear sellos flotantes MÁS GRANDES y LENTOS al explotar
+        function generarSellos() {
+            sellos = [];
+            const textos = ['DENEGADO', 'APROBADO', 'EXPEDIENTE', 'PENDIENTE', 'K.'];
+            for (let i = 0; i < 20; i++) {
+                let ang = Math.random() * Math.PI * 2;
+                let v = Math.random() * 3 + 1.5; // Velocidad reducida (despacio)
+                sellos.push({
+                    x: mesa.x,
+                    y: mesa.y - 30,
+                    vx: Math.cos(ang) * v,
+                    vy: Math.sin(ang) * v,
+                    texto: textos[Math.floor(Math.random() * textos.length)],
+                    alfa: 1
+                });
+            }
+        }
+
+        // Control del Botón de Audio (ON/OFF)
+        btnAudio.addEventListener('click', (e) => {
+            e.stopPropagation();
+            audioElement.muted = !audioElement.muted;
+            btnAudio.textContent = audioElement.muted ? "🔇 Sonido: OFF" : "🔊 Sonido: ON";
+        });
+
+        // Iniciar Animación
+        btnInicio.addEventListener('click', () => {
+            btnInicio.style.display = 'none';
+            panelControles.style.display = 'flex';
+            canvasContainer.style.display = 'block';
+
+            ajustarCanvas();
+            reiniciarBucle();
+            activo = true;
+
+            audioElement.currentTime = 0;
+            audioElement.muted = false;
+            btnAudio.textContent = "🔊 Sonido: ON";
+            audioElement.play().catch(err => console.log(err));
+
+            iniciarAnimacion();
+        });
+
+        // Salir
+        btnSalir.addEventListener('click', (e) => {
+            e.stopPropagation();
+            activo = false;
+            if (animacionId) cancelAnimationFrame(animacionId);
+
+            audioElement.pause();
+            audioElement.currentTime = 0;
+
+            canvasContainer.style.display = 'none';
+            panelControles.style.display = 'none';
+            btnInicio.style.display = 'block';
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        });
+
+        function reiniciarBucle() {
+            estado = 'ESCRIBIENDO';
+            tiempoEstado = Date.now();
+            folios = [];
+            sellos = [];
+            pasoTecleo = 0;
+            escarabajoPos.x = mesa.x;
+            escarabajoPos.y = mesa.y - 30;
+        }
+
+        // BUCLE PRINCIPAL
+        function iniciarAnimacion() {
+            if (!activo) return;
+
+            // Limpieza total para que no quede estela
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            let ahora = Date.now();
+            pasoTecleo += 0.2;
+
+            // DIBUJAR LLUVIA DE PAPEL BLANCO
+            if (Math.random() < 0.3) generarFolio();
+            dibujarFolios();
+
+            if (estado === 'ESCRIBIENDO') {
+                dibujarEscritorio();
+                dibujarOficinista(mesa.x, mesa.y - 15, false);
+
+                if (ahora - tiempoEstado > 6000) {
+                    estado = 'TRANSFORMACION';
+                    tiempoEstado = ahora;
+                }
+            }
+            else if (estado === 'TRANSFORMACION') {
+                dibujarEscritorio();
+
+                let parpadeo = Math.random() > 0.3;
+                if (parpadeo) dibujarOficinista(mesa.x, mesa.y - 15, true);
+
+                if (ahora - tiempoEstado > 3500) {
+                    estado = 'HUIDA';
+                    generarSellos();
+                    tiempoEstado = ahora;
+                }
+            }
+            else if (estado === 'HUIDA') {
+                dibujarSellos();
+
+                // El escarabajo sube despacio
+                escarabajoPos.y -= 4;
+                dibujarEscarabajo(escarabajoPos.x, escarabajoPos.y);
+
+                if (escarabajoPos.y < -100) {
+                    estado = 'ESPERA';
+                    tiempoEstado = ahora;
+                }
+            }
+            else if (estado === 'ESPERA') {
+                if (ahora - tiempoEstado > 3000) {
+                    reiniciarBucle();
+                }
+            }
+
+            animacionId = requestAnimationFrame(iniciarAnimacion);
+        }
+
+        // DIBUJAR ESCRITORIO
+        function dibujarEscritorio() {
+            ctx.save();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ffffff';
+
+            // Mesa
+            ctx.beginPath();
+            ctx.moveTo(mesa.x - 70, mesa.y);
+            ctx.lineTo(mesa.x + 70, mesa.y);
+            ctx.moveTo(mesa.x - 50, mesa.y);
+            ctx.lineTo(mesa.x - 50, mesa.y + 40);
+            ctx.moveTo(mesa.x + 50, mesa.y);
+            ctx.lineTo(mesa.x + 50, mesa.y + 40);
+            ctx.stroke();
+
+            // Máquina de escribir
+            ctx.strokeRect(mesa.x - 20, mesa.y - 15, 40, 15);
+
+            // Lámpara
+            ctx.beginPath();
+            ctx.moveTo(mesa.x - 60, mesa.y);
+            ctx.lineTo(mesa.x - 60, mesa.y - 80);
+            ctx.lineTo(mesa.x - 30, mesa.y - 80);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(mesa.x - 30, mesa.y - 80, 8, 0, Math.PI, true);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        // DIBUJAR OFICINISTA / TRANSFORMATION
+        function dibujarOficinista(x, y, enTransformacion) {
+            ctx.save();
+            ctx.translate(x, y);
+
+            ctx.strokeStyle = '#ffffff';
+            ctx.fillStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ffffff';
+
+            // Cabeza
+            ctx.beginPath();
+            ctx.arc(0, -45, 7, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Torso
+            ctx.beginPath();
+            ctx.moveTo(0, -38);
+            ctx.lineTo(0, -15);
+            ctx.stroke();
+
+            // Brazos al teclear
+            let tecleo = Math.sin(pasoTecleo) * 4;
+            ctx.beginPath();
+            ctx.moveTo(0, -30);
+            ctx.lineTo(-12, -15 + tecleo);
+            ctx.moveTo(0, -30);
+            ctx.lineTo(12, -15 - tecleo);
+            ctx.stroke();
+
+            // Silla
+            ctx.strokeRect(-12, -15, 24, 4);
+
+            if (enTransformacion) {
+                for (let i = -1; i <= 1; i += 2) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, -28);
+                    ctx.lineTo(i * 25, -35 + Math.sin(pasoTecleo * 2) * 6);
+                    ctx.lineTo(i * 38, -20);
+                    ctx.stroke();
+                }
+            }
+
+            ctx.restore();
+        }
+
+        // DIBUJAR ESCARABAJO COMPLETO (HUYENDO)
+        function dibujarEscarabajo(x, y) {
+            ctx.save();
+            ctx.translate(x, y);
+
+            ctx.strokeStyle = '#ffffff';
+            ctx.fillStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = '#ffffff';
+
+            // Cuerpo
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 16, 24, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Cabeza y antenas
+            ctx.beginPath();
+            ctx.arc(0, -26, 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(-3, -30);
+            ctx.lineTo(-12, -40);
+            ctx.moveTo(3, -30);
+            ctx.lineTo(12, -40);
+            ctx.stroke();
+
+            // Patas
+            let paso = Math.sin(pasoTecleo * 2) * 8;
+            for (let i = -1; i <= 1; i++) {
+                ctx.beginPath();
+                ctx.moveTo(-12, i * 12);
+                ctx.lineTo(-30, i * 14 + paso);
+                ctx.lineTo(-42, i * 16);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(12, i * 12);
+                ctx.lineTo(30, i * 14 - paso);
+                ctx.lineTo(42, i * 16);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        // DIBUJAR FOLIOS BLANCOS CAIENDO
+        function dibujarFolios() {
+            for (let i = folios.length - 1; i >= 0; i--) {
+                let f = folios[i];
+                f.y += f.vy;
+                f.rot += f.vRot;
+
+                if (f.y > canvas.height + 40) {
+                    folios.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.translate(f.x, f.y);
+                ctx.rotate(f.rot);
+
+                ctx.strokeStyle = '#ffffff';
+                ctx.fillStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = '#ffffff';
+                
+                // Folio blanco
+                ctx.strokeRect(-10, -15, 20, 30);
+
+                ctx.restore();
+            }
+        }
+
+        // DIBUJAR SELLOS GRANDES BLANCOS QUE VAN DESPACIO
+        function dibujarSellos() {
+            for (let i = sellos.length - 1; i >= 0; i--) {
+                let s = sellos[i];
+                s.x += s.vx;
+                s.y += s.vy;
+                s.alfa -= 0.008; // Desaparecen más despacio
+
+                if (s.alfa <= 0) {
+                    sellos.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.translate(s.x, s.y);
+
+                ctx.fillStyle = `rgba(255, 255, 255, ${s.alfa})`;
+                ctx.font = 'bold 28px "Courier New", monospace'; // Tamaño aumentado
+                ctx.textAlign = 'center';
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#ffffff';
+                ctx.fillText(s.texto, 0, 0);
+
+                ctx.restore();
+            }
+        }
+    </script>
+</body>
+</html>
